@@ -244,31 +244,6 @@ async function moveObject(fromBucket, toBucket, fileKey, secretKey, accessId) {
 	console.log(JSON.stringify(deleteRes));
 }
 
-// List all objects in a n S3 bucket
-// Need more info on this one as it's not being used anywhere in cl-server
-// async function listObjects(
-// 	bucket,
-// 	data,
-// 	continuationToken,
-// 	secretKey,
-// 	accessId
-// ) {
-// 	const params = {
-// 		Bucket: bucket,
-// 		ContinuationToken: continuationToken,
-// 	};
-// 	const response = await s3(secretKey, accessId)
-// 		.listObjectsV2(params)
-// 		.promise();
-// 	if (response.Contents) {
-// 		data.push(...response.Contents);
-// 	}
-// 	if (response.IsTruncated) {
-// 		return this.listObjects(bucket, data, response.NextContinuationToken);
-// 	}
-// 	return data;
-// }
-
 function publishToSNS(topic, data, secretKey, accessId) {
 	const SNS = new aws.SNS({
 		apiVersion: '2010-03-31',
@@ -374,7 +349,6 @@ module.exports = {
 	invokeLambda,
 	getSSMParam,
 	setSSMParam,
-	// listObjects,
 	moveObject,
 	getSignedUrl,
 };
