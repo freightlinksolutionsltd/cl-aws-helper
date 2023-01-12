@@ -74,6 +74,16 @@ function upload(bucketName, secretKey, accessId) {
 	});
 }
 
+function uploadDocument(doc, bucketName, fn, secretKey, accessId) {
+	const params = {
+		Bucket: bucketName,
+		Key: fn,
+		Body: Buffer.from(doc),
+	};
+	const uploadToS3 = s3(secretKey, accessId).upload(params);
+	return uploadToS3.promise();
+}
+
 async function uploadPDF(doc, bucketName, fn, secretKey, accessId) {
 	const params = {
 		Bucket: bucketName,
@@ -351,4 +361,5 @@ module.exports = {
 	setSSMParam,
 	moveObject,
 	getSignedUrl,
+	uploadDocument,
 };
