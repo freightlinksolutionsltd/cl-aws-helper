@@ -331,6 +331,21 @@ async function getSignedUrl(bucketName, fn, expiry, secretKey, accessId) {
   return obj;
 }
 
+async function listObjects(bucketName, data, continuationToken, secretKey, accessId) {
+  const params = {
+    Bucket: bucketName,
+    ContinuationToken: continuationToken,
+  };
+  const response = await s3(secretKey, accessId).listObjectsV2(params).promise();
+  if (response.Contents) {
+    data.push(...response.Contents);
+  }
+  if (response.IsTruncated) {
+    return listObjects(bucketName, data, response.NextContinuationToken, secretKey, accessId);
+  }
+  return data;
+}
+
 module.exports = {
   s3,
   upload,
@@ -346,4 +361,5 @@ module.exports = {
   moveObject,
   getSignedUrl,
   uploadDocument,
+  listObjects,
 };

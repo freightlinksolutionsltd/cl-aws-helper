@@ -91,3 +91,13 @@ expiry - string value stating how long the generated link should be valid. Possi
 If no value will be specified or a value will be different from the ones specified above, the default expiry time will be 10 minutes.
 
 This method creates a link to download file from S3 bucket. This link will only be valid for a specified period of time, after which it will expire and will no longer be accessible.
+
+### 14. listObjects(bucketName, data, continuationToken, secretKey, accessId)
+
+bucketName - name of S3 bucket we want to get a list of objects from
+
+data - an array (preferably empty array) the data will be stored and returned with. We need this to invoke function recursively
+
+continuationToken - used to run function recursively and get correct info from S3 bucket when data is truncated. Null can be passed in, as this is not used in first iteration
+
+This method returns the array of all objects from selected S3 bucket.
