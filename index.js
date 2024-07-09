@@ -157,11 +157,20 @@ async function invokeLambda(lambdaFunc, payload, secretKey, accessId) {
   const params = {
     FunctionName: lambdaFunc,
     Payload: JSON.stringify(lambdaPayload),
+    LogType: 'Tail',
   };
 
   const command = new InvokeCommand(params);
-  const res = await client.send(command);
-  return res;
+
+  const { Payload, LogResult } = await client.send(command);
+  const result = Buffer.from(Payload).toString();
+  const logs = Buffer.from(LogResult, 'base64').toString();
+  console.log(logs);
+
+  return result;
+
+  /* const res = await client.send(command);
+  return res; */
 }
 
 function publishEvent(event, data, awsDisabled, eventBus, eventSource, secretKey, accessId) {
