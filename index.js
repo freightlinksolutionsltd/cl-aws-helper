@@ -163,9 +163,12 @@ async function invokeLambda(lambdaFunc, payload, secretKey, accessId) {
   const command = new InvokeCommand(params);
 
   const { Payload, LogResult } = await client.send(command);
-  const result = Buffer.from(Payload).toString();
-  const logs = Buffer.from(LogResult, 'base64').toString();
-  console.log(logs);
+  const result = {
+    Payload: Buffer.from(Payload).toString(),
+    Logs: Buffer.from(LogResult, 'base64').toString(),
+  };
+
+  console.log(result.Logs);
 
   return result;
 
