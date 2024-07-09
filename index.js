@@ -63,15 +63,19 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-function upload(bucketName, secretKey, accessId) {
+function upload(uploadBucket, bucketName, secretKey, accessId) {
   const s3Bucket = s3(secretKey, accessId);
+
   return multer({
     fileFilter,
     storage: multerS3({
       acl: 'private',
       s3: s3Bucket,
-      bucket: bucketName,
-      key(req, file, cb) {
+      bucket: uploadBucket,
+      metadata: (req, file, cb) => {
+        cb(null, { 'destination-bucket': bucketName });
+      },
+      key: (req, file, cb) => {
         const ext = file.originalname.split('.').reverse()[0];
         if (req.params.passportNo) {
           req.file = `${req.params.passportNo}-${Date.now()}.${ext}`;
@@ -85,15 +89,18 @@ function upload(bucketName, secretKey, accessId) {
   });
 }
 
-function uploadImportDoc(bucketName, secretKey, accessId) {
+function uploadImportDoc(uploadBucket, bucketName, secretKey, accessId) {
   const s3Bucket = s3(secretKey, accessId);
   return multer({
     fileFilter,
     storage: multerS3({
       acl: 'private',
       s3: s3Bucket,
-      bucket: bucketName,
-      key(req, file, cb) {
+      bucket: uploadBucket,
+      metadata: (req, file, cb) => {
+        cb(null, { 'destination-bucket': bucketName });
+      },
+      key: (req, file, cb) => {
         /* I'm using Date.now() to make sure my file has a unique name */
         const ext = file.originalname.split('.').reverse()[0];
         const fileName = file.originalname.replace(`.${ext}`, '');
