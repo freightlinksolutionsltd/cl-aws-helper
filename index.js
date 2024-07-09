@@ -1,4 +1,9 @@
-const aws = require('aws-sdk');
+const { S3, GetObjectCommand, PutObjectCommand, ListObjectsV2Command, CopyObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { EventBridge, PutEventsCommand } = require('@aws-sdk/client-eventbridge');
+const { Lambda, InvokeCommand } = require('@aws-sdk/client-lambda');
+const { SSM, GetParametersCommand, PutParameterCommand } = require('@aws-sdk/client-ssm');
+const { SNS, PublishCommand } = require('@aws-sdk/client-sns');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const multer = require('multer');
 const multerS3 = require('multer-s3');
 const console = require('console');
@@ -20,25 +25,31 @@ const allowedTypes = [
 ];
 
 function s3(secretKey, accessId) {
-  return new aws.S3({
-    secretAccessKey: secretKey,
-    accessKeyId: accessId,
+  return new S3({
+    credentials: {
+      accessKeyId: accessId,
+      secretAccessKey: secretKey,
+    },
     region: 'eu-west-2', // E.g us-east-1
   });
 }
 
 function eventBridge(secretKey, accessId) {
-  return new aws.EventBridge({
-    secretAccessKey: secretKey,
-    accessKeyId: accessId,
+  return new EventBridge({
+    credentials: {
+      accessKeyId: accessId,
+      secretAccessKey: secretKey,
+    },
     region: 'eu-west-2', // E.g us-east-1
   });
 }
 
 function lambda(secretKey, accessId) {
-  return new aws.Lambda({
-    secretAccessKey: secretKey,
-    accessKeyId: accessId,
+  return new Lambda({
+    credentials: {
+      accessKeyId: accessId,
+      secretAccessKey: secretKey,
+    },
     region: 'eu-west-2', // E.g us-east-1
   });
 }
@@ -74,17 +85,40 @@ function upload(bucketName, secretKey, accessId) {
   });
 }
 
-function uploadDocument(doc, bucketName, fn, secretKey, accessId) {
+function uploadImportDoc(bucketName, secretKey, accessId) {
+  const s3Bucket = s3(secretKey, accessId);
+  return multer({
+    fileFilter,
+    storage: multerS3({
+      acl: 'private',
+      s3: s3Bucket,
+      bucket: bucketName,
+      key(req, file, cb) {
+        /* I'm using Date.now() to make sure my file has a unique name */
+        const ext = file.originalname.split('.').reverse()[0];
+        const fileName = file.originalname.replace(`.${ext}`, '');
+        req.file = `${req.user._id}-${fileName}-${Date.now()}.${ext}`;
+
+        cb(null, req.file);
+      },
+    }),
+  });
+}
+
+async function uploadDocument(doc, bucketName, fn, secretKey, accessId) {
+  const client = s3(secretKey, accessId);
   const params = {
     Bucket: bucketName,
     Key: fn,
     Body: Buffer.from(doc),
   };
-  const uploadToS3 = s3(secretKey, accessId).upload(params);
-  return uploadToS3.promise();
+  const command = new PutObjectCommand(params);
+  const uploadToS3 = await client.send(command);
+  return uploadToS3;
 }
 
 async function uploadPDF(doc, bucketName, fn, secretKey, accessId) {
+  const client = s3(secretKey, accessId);
   const params = {
     Bucket: bucketName,
     Key: fn,
@@ -92,19 +126,20 @@ async function uploadPDF(doc, bucketName, fn, secretKey, accessId) {
     ContentType: 'application/pdf',
     EncodingType: 'base64',
   };
-  const pdfUpload = s3(secretKey, accessId).upload(params);
-  const data = await pdfUpload.promise();
+  const command = new PutObjectCommand(params);
+  const data = await client.send(command);
   return data.Body;
 }
 
 async function download(fn, bucketName, secretKey, accessId) {
   try {
+    const client = s3(secretKey, accessId);
     const params = {
       Bucket: bucketName,
       Key: fn,
     };
-
-    const res = await s3(secretKey, accessId).getObject(params).promise();
+    const command = new GetObjectCommand(params);
+    const res = await client.send(command);
     return res;
   } catch (e) {
     console.log(e);
@@ -118,13 +153,14 @@ async function invokeLambda(lambdaFunc, payload, secretKey, accessId) {
     detail: payload,
   };
 
+  const client = lambda(secretKey, accessId);
   const params = {
     FunctionName: lambdaFunc,
     Payload: JSON.stringify(lambdaPayload),
   };
 
-  const res = await lambda(secretKey, accessId).invoke(params).promise();
-
+  const command = new InvokeCommand(params);
+  const res = await client.send(command);
   return res;
 }
 
@@ -133,6 +169,7 @@ function publishEvent(event, data, awsDisabled, eventBus, eventSource, secretKey
     return true;
   }
 
+  const client = eventBridge(secretKey, accessId);
   const params = {
     Entries: [
       {
@@ -158,29 +195,32 @@ function publishEvent(event, data, awsDisabled, eventBus, eventSource, secretKey
   if (size > 256) {
     console.log(`=> AWS Event bridge: The payload for passport ${data.passportNo} is ${size}KB which exceeds the 256KB payload limit`);
   }
-  return eventBridge(secretKey, accessId).putEvents(params).promise();
+  const command = new PutEventsCommand(params);
+  return client.send(command);
 }
 
 async function getSSMParam(param, secretKey, accessId) {
-  const ssm = new aws.SSM({
-    secretAccessKey: secretKey,
-    accessKeyId: accessId,
+  const client = new SSM({
+    credentials: {
+      accessKeyId: accessId,
+      secretAccessKey: secretKey,
+    },
     region: 'eu-west-2',
   });
 
-  const paramRs = await ssm
-    .getParameters({
-      Names: [param],
-    })
-    .promise();
-
+  const command = new GetParametersCommand({
+    Names: [param],
+  });
+  const paramRs = await client.send(command);
   return paramRs;
 }
 
 async function setSSMParam(param, value, secretKey, accessId) {
-  const ssm = new aws.SSM({
-    secretAccessKey: secretKey,
-    accessKeyId: accessId,
+  const client = new SSM({
+    credentials: {
+      accessKeyId: accessId,
+      secretAccessKey: secretKey,
+    },
     region: 'eu-west-2',
   });
 
@@ -191,31 +231,14 @@ async function setSSMParam(param, value, secretKey, accessId) {
     Type: 'String',
   };
 
-  const parameter = await ssm.putParameter(params).promise();
+  const command = new PutParameterCommand(params);
+  const parameter = await client.send(command);
   return parameter;
 }
 
-function uploadImportDoc(bucketName, secretKey, accessId) {
-  const s3Bucket = s3(secretKey, accessId);
-  return multer({
-    fileFilter,
-    storage: multerS3({
-      acl: 'private',
-      s3: s3Bucket,
-      bucket: bucketName,
-      key(req, file, cb) {
-        /* I'm using Date.now() to make sure my file has a unique name */
-        const ext = file.originalname.split('.').reverse()[0];
-        const fileName = file.originalname.replace(`.${ext}`, '');
-        req.file = `${req.user._id}-${fileName}-${Date.now()}.${ext}`;
-
-        cb(null, req.file);
-      },
-    }),
-  });
-}
-
 async function moveObject(fromBucket, toBucket, fileKey, secretKey, accessId) {
+  const client = s3(secretKey, accessId);
+
   const copyParams = {
     Bucket: toBucket,
     CopySource: encodeURI(`/${fromBucket}/${fileKey}`),
@@ -224,40 +247,45 @@ async function moveObject(fromBucket, toBucket, fileKey, secretKey, accessId) {
 
   console.log(`Attempting s3 copy of "${fileKey}" from "${fromBucket}" to "${toBucket}"`);
 
-  const copyRes = await s3(secretKey, accessId).copyObject(copyParams).promise();
+  const copyCommand = new CopyObjectCommand(copyParams);
+  const copyRes = await client.send(copyCommand);
   console.log(JSON.stringify(copyRes));
 
-  const deleteparams = {
+  const deleteParams = {
     Bucket: fromBucket,
     Key: fileKey,
   };
 
   console.log(`Attempting s3 delete of "${fileKey}" from "${fromBucket}"`);
 
-  const deleteRes = await s3(secretKey, accessId).deleteObject(deleteparams).promise();
+  const deleteCommand = new DeleteObjectCommand(deleteParams);
+  const deleteRes = await client.send(deleteCommand);
   console.log(JSON.stringify(deleteRes));
 }
 
 function publishToSNS(topic, data, secretKey, accessId) {
-  const SNS = new aws.SNS({
-    apiVersion: '2010-03-31',
+  const client = new SNS({
+    credentials: {
+      accessKeyId: accessId,
+      secretAccessKey: secretKey,
+    },
     region: 'eu-west-2',
-    secretAccessKey: secretKey,
-    accessKeyId: accessId,
   });
   const params = {
     TopicArn: topic,
     Message: JSON.stringify(data),
   };
-  return SNS.publish(params).promise();
+  const command = new PublishCommand(params);
+  return client.send(command);
 }
 
 function sendSMS(mobileNo, subject, body, secretKey, accessId) {
-  const SNS = new aws.SNS({
-    apiVersion: '2010-03-31',
+  const client = new SNS({
+    credentials: {
+      accessKeyId: accessId,
+      secretAccessKey: secretKey,
+    },
     region: 'eu-west-2',
-    secretAccessKey: secretKey,
-    accessKeyId: accessId,
   });
   const params = {
     Message: body,
@@ -269,10 +297,11 @@ function sendSMS(mobileNo, subject, body, secretKey, accessId) {
       },
     },
   };
-  return SNS.publish(params).promise();
+  const command = new PublishCommand(params);
+  return client.send(command);
 }
 
-async function getSignedUrl(bucketName, fn, expiry, secretKey, accessId) {
+async function gets3SignedUrl(bucketName, fn, expiry, secretKey, accessId) {
   let expires = null;
   let expiryMessage = '';
 
@@ -317,11 +346,12 @@ async function getSignedUrl(bucketName, fn, expiry, secretKey, accessId) {
     }
   }
 
-  const url = await s3(secretKey, accessId).getSignedUrl('getObject', {
+  const client = s3(secretKey, accessId);
+  const command = new GetObjectCommand({
     Bucket: bucketName,
     Key: fn,
-    Expires: expires,
   });
+  const url = await getSignedUrl(client, command, { expiresIn: expires });
 
   const obj = {
     url,
@@ -332,11 +362,13 @@ async function getSignedUrl(bucketName, fn, expiry, secretKey, accessId) {
 }
 
 async function listObjects(bucketName, data, continuationToken, secretKey, accessId) {
+  const client = s3(secretKey, accessId);
   const params = {
     Bucket: bucketName,
     ContinuationToken: continuationToken,
   };
-  const response = await s3(secretKey, accessId).listObjectsV2(params).promise();
+  const command = new ListObjectsV2Command(params);
+  const response = await client.send(command);
   if (response.Contents) {
     data.push(...response.Contents);
   }
@@ -359,7 +391,7 @@ module.exports = {
   getSSMParam,
   setSSMParam,
   moveObject,
-  getSignedUrl,
+  getSignedUrl: gets3SignedUrl,
   uploadDocument,
   listObjects,
 };
