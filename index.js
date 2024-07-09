@@ -112,26 +112,33 @@ function uploadImportDoc(uploadBucket, bucketName, secretKey, accessId) {
   });
 }
 
-async function uploadDocument(doc, bucketName, fn, secretKey, accessId) {
+// might not be used (not in cl-server)
+async function uploadDocument(doc, uploadBucket, bucketName, fn, secretKey, accessId) {
   const client = s3(secretKey, accessId);
   const params = {
-    Bucket: bucketName,
+    Bucket: uploadBucket,
     Key: fn,
     Body: Buffer.from(doc),
+    Metadata: {
+      'destination-bucket': bucketName,
+    },
   };
   const command = new PutObjectCommand(params);
   const uploadToS3 = await client.send(command);
   return uploadToS3;
 }
 
-async function uploadPDF(doc, bucketName, fn, secretKey, accessId) {
+async function uploadPDF(doc, uploadBucket, bucketName, fn, secretKey, accessId) {
   const client = s3(secretKey, accessId);
   const params = {
-    Bucket: bucketName,
+    Bucket: uploadBucket,
     Key: fn,
     Body: Buffer.from(doc, 'base64'),
     ContentType: 'application/pdf',
     EncodingType: 'base64',
+    Metadata: {
+      'destination-bucket': bucketName,
+    },
   };
   const command = new PutObjectCommand(params);
   const data = await client.send(command);
@@ -175,7 +182,7 @@ async function invokeLambda(lambdaFunc, payload, secretKey, accessId) {
     Logs: Buffer.from(LogResult, 'base64').toString(),
   };
 
-  console.log(result.Logs);
+  // console.log(result.Logs);
 
   return result;
 
