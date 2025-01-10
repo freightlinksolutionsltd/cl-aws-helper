@@ -129,8 +129,5 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
-# Lambda Archive
-Archive.zip
-
-# Mac OS specific file
+*.zip
 .DS_Store

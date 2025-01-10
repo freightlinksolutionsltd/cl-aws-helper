@@ -1,12 +1,15 @@
+/* eslint-disable prefer-const */
 const { S3, GetObjectCommand, PutObjectCommand, ListObjectsV2Command, CopyObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { EventBridge, PutEventsCommand } = require('@aws-sdk/client-eventbridge');
 const { Lambda, InvokeCommand } = require('@aws-sdk/client-lambda');
 const { SSM, GetParametersCommand, PutParameterCommand } = require('@aws-sdk/client-ssm');
 const { SNS, PublishCommand } = require('@aws-sdk/client-sns');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs');
 const multer = require('multer');
 const multerS3 = require('multer-s3');
 const console = require('console');
+const crypto = require('crypto');
 
 const allowedTypes = [
   'application/octet-stream',
@@ -23,6 +26,16 @@ const allowedTypes = [
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ];
+
+function sqsClient(secretKey, accessId) {
+  return new SQSClient({
+    region: 'eu-west-2',
+    credentials: {
+      accessKeyId: accessId,
+      secretAccessKey: secretKey,
+    },
+  });
+}
 
 function s3(secretKey, accessId) {
   return new S3({
@@ -188,6 +201,69 @@ async function invokeLambda(lambdaFunc, payload, secretKey, accessId) {
 
   /* const res = await client.send(command);
   return res; */
+}
+
+async function generateUniqueString() {
+  // Generate a random buffer of 16 bytes, similar to a UUID
+  const buffer = crypto.randomBytes(16);
+  // Convert the buffer to a base64 string
+  const uniqueString = buffer
+    .toString('base64')
+    // Modify the string to be URL safe by replacing '+' with '-', '/' with '_', and remove '=' padding
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+  return uniqueString;
+}
+
+async function publishToQueue(queueUrl, messageGroupId, event, data, awsDisabled, uploadBucket, secretKey, accessId) {
+  if (awsDisabled) {
+    return true;
+  }
+
+  try {
+    let modifiedData = {
+      payload: data,
+      s3Key: '',
+      originalDetailType: event,
+    };
+
+    let uniqueString = await generateUniqueString();
+    let command = new SendMessageCommand({
+      QueueUrl: queueUrl,
+      MessageBody: JSON.stringify(modifiedData),
+      MessageGroupId: messageGroupId, // MessageGroupId can be anything but must be consistent across messages to maintain order.
+      MessageDeduplicationId: uniqueString,
+    });
+
+    const payloadSize = Buffer.byteLength(JSON.stringify(command), 'utf-8');
+    const sizeKB = Math.round(payloadSize / 1024);
+
+    if (sizeKB > 256) {
+      console.log(`=> AWS SQS: The payload is ${sizeKB}KB which exceeds the 256KB payload limit. Adding to S3 for further processing`);
+      uniqueString = await generateUniqueString();
+      const fileName = `cl-${uniqueString}.json`;
+      await uploadDocument(JSON.stringify(data), uploadBucket, uploadBucket, fileName, secretKey, accessId);
+      modifiedData.s3Key = fileName;
+      modifiedData.payload = {};
+    }
+
+    command = new SendMessageCommand({
+      QueueUrl: queueUrl,
+      MessageBody: JSON.stringify(modifiedData),
+      MessageGroupId: messageGroupId, // MessageGroupId can be anything but must be consistent across messages to maintain order.
+      MessageDeduplicationId: uniqueString,
+    });
+
+    const sqsClientInstance = sqsClient(secretKey, accessId);
+
+    const response = await sqsClientInstance.send(command);
+    console.log('sent', response);
+    return response;
+  } catch (error) {
+    console.log(error);
+    throw error;
+  }
 }
 
 function publishEvent(event, data, awsDisabled, eventBus, eventSource, secretKey, accessId) {
@@ -420,4 +496,6 @@ module.exports = {
   getSignedUrl: gets3SignedUrl,
   uploadDocument,
   listObjects,
+  publishToQueue,
+  generateUniqueString,
 };

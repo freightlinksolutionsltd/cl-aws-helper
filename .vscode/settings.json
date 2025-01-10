@@ -2,5 +2,11 @@
   "editor.formatOnSave": false,
   // Runs Prettier, then ESLint
   "editor.codeActionsOnSave": ["source.formatDocument", "source.fixAll.eslint"],
-  "editor.tabSize": 2
+  "editor.tabSize": 2,
+  "testExplorer.useNativeTesting": false,
+  "mochaExplorer.files": "./spec/*.spec.js",
+  "mochaExplorer.logpanel": true,
+  "mochaExplorer.exit": true,
+  "mochaExplorer.monkeyPatch": false,
+  "mochaExplorer.ipcTimeout": 0
 }
