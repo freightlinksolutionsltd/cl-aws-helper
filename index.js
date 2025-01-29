@@ -37,7 +37,7 @@ function sqsClient(secretKey, accessId) {
   });
 }
 
-function s3(secretKey, accessId) {
+/* function s3(secretKey, accessId) {
   return new S3({
     credentials: {
       accessKeyId: accessId,
@@ -45,6 +45,21 @@ function s3(secretKey, accessId) {
     },
     region: 'eu-west-2', // E.g us-east-1
   });
+} */
+
+function s3(secretKey, accessId) {
+  const config = {
+    region: 'eu-west-2',
+  };
+
+  if (secretKey && accessId) {
+    config.credentials = {
+      accessKeyId: accessId,
+      secretAccessKey: secretKey,
+    };
+  }
+
+  return new S3(config);
 }
 
 function eventBridge(secretKey, accessId) {
@@ -76,7 +91,7 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-function upload(uploadBucket, bucketName, secretKey, accessId) {
+function upload(uploadBucket, secretKey, accessId, bucketName = '') {
   const s3Bucket = s3(secretKey, accessId);
 
   return multer({
@@ -102,7 +117,7 @@ function upload(uploadBucket, bucketName, secretKey, accessId) {
   });
 }
 
-function uploadImportDoc(uploadBucket, bucketName, secretKey, accessId) {
+function uploadImportDoc(uploadBucket, secretKey, accessId, bucketName = '') {
   const s3Bucket = s3(secretKey, accessId);
   return multer({
     fileFilter,
@@ -126,33 +141,36 @@ function uploadImportDoc(uploadBucket, bucketName, secretKey, accessId) {
 }
 
 // might not be used (not in cl-server)
-async function uploadDocument(doc, uploadBucket, bucketName, fn, secretKey, accessId) {
+async function uploadDocument(doc, uploadBucket, fn, secretKey, accessId, bucketName = '') {
   const client = s3(secretKey, accessId);
   const params = {
     Bucket: uploadBucket,
     Key: fn,
     Body: Buffer.from(doc),
-    Metadata: {
-      'destination-bucket': bucketName,
-    },
   };
+
+  if (bucketName !== '') {
+    params.Metadata['destination-bucket'] = bucketName;
+  }
   const command = new PutObjectCommand(params);
   const uploadToS3 = await client.send(command);
   return uploadToS3;
 }
 
-async function uploadPDF(doc, uploadBucket, bucketName, fn, secretKey, accessId) {
+async function uploadPDF(doc, uploadBucket, fn, secretKey, accessId, bucketName = '') {
   const client = s3(secretKey, accessId);
   const params = {
     Bucket: uploadBucket,
     Key: fn,
     Body: Buffer.from(doc, 'base64'),
     ContentType: 'application/pdf',
-    EncodingType: 'base64',
-    Metadata: {
-      'destination-bucket': bucketName,
-    },
+    EncodingType: 'base64'
   };
+
+  if (bucketName !== '') {
+    params.Metadata['destination-bucket'] = bucketName;
+  }
+
   const command = new PutObjectCommand(params);
   const data = await client.send(command);
   return data.Body;
