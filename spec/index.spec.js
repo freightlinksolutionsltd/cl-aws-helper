@@ -176,7 +176,6 @@ describe('uploadPDF function', function() {
       const result = await uploadPDF(
         mockPDFData,
         bucketName,
-        '',
         fileName,
         secretKey,
         accessId
