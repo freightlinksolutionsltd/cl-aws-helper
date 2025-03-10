@@ -147,6 +147,7 @@ async function uploadDocument(doc, uploadBucket, fn, secretKey, accessId, bucket
     Bucket: uploadBucket,
     Key: fn,
     Body: Buffer.from(doc),
+    Metadata: {} // Initialize the Metadata object
   };
 
   if (bucketName !== '') {
@@ -164,7 +165,8 @@ async function uploadPDF(doc, uploadBucket, fn, secretKey, accessId, bucketName 
     Key: fn,
     Body: Buffer.from(doc, 'base64'),
     ContentType: 'application/pdf',
-    EncodingType: 'base64'
+    EncodingType: 'base64',
+    Metadata: {} // Initialize the Metadata object
   };
 
   if (bucketName !== '') {
