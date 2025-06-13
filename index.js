@@ -27,6 +27,84 @@ const allowedTypes = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ];
 
+// Lookup object for file extensions to MIME types
+const mimeTypeLookup = {
+  // Documents
+  'pdf': 'application/pdf',
+  'doc': 'application/msword',
+  'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'rtf': 'text/rtf',
+  'txt': 'text/plain',
+
+  // Spreadsheets
+  'xls': 'application/vnd.ms-excel',
+  'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'csv': 'text/csv',
+
+  // Images
+  'jpg': 'image/jpeg',
+  'jpeg': 'image/jpeg',
+  'png': 'image/png',
+  'gif': 'image/gif',
+  'svg': 'image/svg+xml',
+  'webp': 'image/webp',
+  'bmp': 'image/bmp',
+  'tiff': 'image/tiff',
+  'tif': 'image/tiff',
+
+  // Audio
+  'mp3': 'audio/mpeg',
+  'wav': 'audio/wav',
+  'ogg': 'audio/ogg',
+  'flac': 'audio/flac',
+  'aac': 'audio/aac',
+
+  // Video
+  'mp4': 'video/mp4',
+  'mov': 'video/quicktime',
+  'avi': 'video/x-msvideo',
+  'wmv': 'video/x-ms-wmv',
+  'mkv': 'video/x-matroska',
+  'webm': 'video/webm',
+
+  // Presentations
+  'ppt': 'application/vnd.ms-powerpoint',
+  'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+
+  // Archives
+  'zip': 'application/zip',
+  'rar': 'application/x-rar-compressed',
+  'tar': 'application/x-tar',
+  'gz': 'application/gzip',
+  '7z': 'application/x-7z-compressed',
+
+  // Web
+  'html': 'text/html',
+  'htm': 'text/html',
+  'css': 'text/css',
+  'js': 'application/javascript',
+  'json': 'application/json',
+  'xml': 'application/xml',
+
+  // Others
+  'md': 'text/markdown',
+  'sql': 'application/sql',
+  'exe': 'application/octet-stream',
+  'dll': 'application/octet-stream',
+  'bin': 'application/octet-stream',
+};
+
+/**
+ * Get the content type for a filename based on its extension
+ * @param {string} filename - The filename or path to determine content type for
+ * @returns {string} - The MIME type (defaults to 'application/octet-stream' if extension not found)
+ */
+function getContentType(filename) {
+  if (!filename) return 'application/octet-stream';
+  const extension = filename.split('.').pop().toLowerCase();
+  return mimeTypeLookup[extension] || 'application/octet-stream';
+}
+
 function sqsClient(secretKey, accessId) {
   return new SQSClient({
     region: 'eu-west-2',
@@ -146,7 +224,9 @@ async function uploadDocument(doc, uploadBucket, fn, secretKey, accessId, bucket
   const params = {
     Bucket: uploadBucket,
     Key: fn,
-    Body: Buffer.from(doc),
+    Body: Buffer.from(doc, 'base64'),
+    ContentType: getContentType(fn),
+    EncodingType: 'base64',
     Metadata: {} // Initialize the Metadata object
   };
 
@@ -517,5 +597,5 @@ module.exports = {
   uploadDocument,
   listObjects,
   publishToQueue,
-  generateUniqueString,
+  generateUniqueString
 };
